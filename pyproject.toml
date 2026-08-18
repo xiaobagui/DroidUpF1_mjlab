@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "droidup-e1-mjlab"
+version = "0.1.0"
+description = "External mjlab tasks and robot assets for E1 development."
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "mjlab==1.5.3",
+  "mujoco==3.10.0",
+  "numpy==2.4.6",
+  "onnx==1.22.0",
+  "pygame==2.6.1",
+  "rsl-rl-lib==5.4.2",
+  "tensorboard==2.21.0",
+  "torch==2.13.0",
+  "tyro==1.0.15",
+]
+
+[project.scripts]
+e1-train = "scripts.train:main"
+e1-play-mimic = "scripts.play_mimic:main"
+e1-play-amp = "scripts.play_amp:main"
+e1-list-envs = "scripts.list_envs:main"
+e1-download-demo-motion = "scripts.download_demo_motion:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
+
+[tool.uv.sources]
+rsl-rl-lib = { path = "rsl_rl", editable = true }
+
+[tool.uv]
+# mjlab 1.5.3's PyPI metadata pins the unpublished rsl-rl-lib==5.4.0.
+# The upstream mjlab source and this editable checkout use the compatible 5.4.2.
+override-dependencies = ["rsl-rl-lib==5.4.2"]
+
+[tool.ruff]
+indent-width = 2
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
