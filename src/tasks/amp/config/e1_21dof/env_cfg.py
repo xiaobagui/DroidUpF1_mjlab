@@ -119,6 +119,10 @@ def e1_21dof_walk_amp_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       entity_name="robot",
       resampling_time_range=(10.0, 10.0),
       rel_standing_envs=0.1,
+      rel_turning_envs=0.1,
+      rel_lateral_envs=0.1,
+      turning_deadband=0.2,
+      lateral_deadband=0.1,
       debug_vis=False,
       ranges=UniformVelocityCommandCfg.Ranges(
         lin_vel_x=(-0.5, 0.8),
@@ -298,7 +302,7 @@ def e1_21dof_walk_amp_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     ),
     "feet_slide": RewardTermCfg(
       func=mdp.feet_slide,
-      weight=-0.1,
+      weight=-0.25,
       params={"sensor_name": "feet_ground_contact", "feet_cfg": feet},
     ),
     "feet_crossing": RewardTermCfg(

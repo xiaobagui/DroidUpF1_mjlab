@@ -186,7 +186,7 @@
         <geom class="visual" mesh="torso_link"/>
         <geom class="collision" mesh="torso_link"/>
         <camera name="depth_cam" pos="0.049 0.01 0.44" xyaxes="0 -1 0  0.743 0 0.669" fovy="58" resolution="64 36"/>
-        <geom name="depth_cam_vis" pos="0.049 0.01 0.44" size="0.03" rgba="1 0 1 1" type="sphere" contype="0" conaffinity="0"/>
+        <geom name="depth_cam_vis" pos="0.049 0.01 0.44" size="0.03" rgba="1 0 1 0" type="sphere" contype="0" conaffinity="0"/>
         <body name="left_shoulder_pitch_link" pos="0 0.109 0.23">
           <inertial pos="0.0002164 0.0326152 7.9e-06" quat="0.705969 0.707947 -0.0128594 -0.015888" mass="0.764" diaginertia="0.000639277 0.000540109 0.000448694"/>
           <joint name="left_shoulder_pitch_joint" class="shoulder_pitch"/>

@@ -48,8 +48,8 @@ AMP_OBS_DIM = (
   + AMP_KEY_BODY_POS_DIM
   + AMP_KEY_BODY_ORI_DIM
 )
-# One discrete conditioning value is appended internally for AMP training:
-# 0 = walk expert, 1 = run expert (including mirrored run data).  It is not
-# part of the actor/environment AMP observation.
-AMP_LABEL_DIM = 1
+# A one-hot conditioning vector is appended internally for AMP training. The
+# four classes are command/style categories and are not actor observations.
+AMP_LABEL_NAMES = ("walk", "run", "turn", "side")
+AMP_LABEL_DIM = len(AMP_LABEL_NAMES)
 AMP_DISCRIMINATOR_STATE_DIM = AMP_OBS_DIM + AMP_LABEL_DIM

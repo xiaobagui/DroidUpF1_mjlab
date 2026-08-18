@@ -6,11 +6,11 @@ import torch
 
 
 class ReplayBuffer:
-  def __init__(self, capacity: int, state_dim: int, device: str):
+  def __init__(self, capacity: int, state_dim: int, label_dim: int, device: str):
     self.capacity = capacity
     self.states = torch.zeros(capacity, state_dim, device=device)
     self.next_states = torch.zeros_like(self.states)
-    self.motion_label = torch.zeros(capacity, device=device)
+    self.motion_label = torch.zeros(capacity, label_dim, device=device)
     self.cursor = 0
     self.size = 0
 

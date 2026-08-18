@@ -6,7 +6,13 @@ import torch
 from rsl_rl.algorithms import PPO
 from tensordict import TensorDict
 
-from src.tasks.amp.constants import AMP_DISCRIMINATOR_STATE_DIM, AMP_OBS_DIM
+from src.tasks.amp.constants import (
+  AMP_DISCRIMINATOR_STATE_DIM,
+  AMP_LABEL_DIM,
+  AMP_LABEL_NAMES,
+  AMP_OBS_DIM,
+)
+from src.tasks.amp.mdp.commands import COMMAND_MODE_LATERAL, COMMAND_MODE_TURNING
 
 from .discriminator import Discriminator
 from .motion_loader import MotionLoader
@@ -27,8 +33,7 @@ class AmpPPO(PPO):
     amp_transition_dt: float = 0.02,
     amp_gradient_penalty: float = 10.0,
     amp_motion_velocity_threshold: float = 0.8,
-    amp_motion_slow_weights: tuple[float, ...] = (0.9, 0.05, 0.05),
-    amp_motion_fast_weights: tuple[float, ...] = (0.1, 0.45, 0.45),
+    amp_motion_weights: tuple[float, ...] = (1.0, 0.5, 0.5, 1.0, 1.0),
     minimum_action_std: tuple[float, ...] | None = None,
     **kwargs,
   ):
@@ -40,8 +45,7 @@ class AmpPPO(PPO):
     self.amp_transition_dt = amp_transition_dt
     self.amp_gradient_penalty = amp_gradient_penalty
     self.amp_motion_velocity_threshold = amp_motion_velocity_threshold
-    self.amp_motion_slow_weights = amp_motion_slow_weights
-    self.amp_motion_fast_weights = amp_motion_fast_weights
+    self.amp_motion_weights = amp_motion_weights
     self.discriminator = Discriminator(
       AMP_DISCRIMINATOR_STATE_DIM, tuple(amp_discriminator_hidden_dims)
     ).to(self.device)
@@ -54,7 +58,10 @@ class AmpPPO(PPO):
     )
     self.amp_normalizer = RunningNormalizer(AMP_OBS_DIM).to(self.device)
     self.amp_replay = ReplayBuffer(
-      amp_replay_buffer_size, AMP_DISCRIMINATOR_STATE_DIM, self.device
+      amp_replay_buffer_size,
+      AMP_DISCRIMINATOR_STATE_DIM,
+      AMP_LABEL_DIM,
+      self.device,
     )
     self.amp_data: MotionLoader | None = None
     self._current_amp_state: torch.Tensor | None = None
@@ -81,11 +88,28 @@ class AmpPPO(PPO):
         self.device,
         self.amp_transition_dt,
         self.amp_preload_transitions,
-        self.amp_motion_velocity_threshold,
-        self.amp_motion_slow_weights,
-        self.amp_motion_fast_weights,
+        self.amp_motion_weights,
       )
     return self.amp_data
+
+  def _command_motion_label(self, command: torch.Tensor) -> torch.Tensor:
+    """Map command modes to a four-class one-hot AMP label."""
+    term = self._env.unwrapped.command_manager.get_term("twist")
+    command_mode = getattr(term, "command_mode", None)
+    if command_mode is None:
+      raise RuntimeError("AMP requires UniformVelocityCommand.command_mode.")
+    label_ids = torch.where(
+      command_mode == COMMAND_MODE_TURNING,
+      torch.full_like(command_mode, 2),
+      torch.where(
+        command_mode == COMMAND_MODE_LATERAL,
+        torch.full_like(command_mode, 3),
+        (command[:, 0] > self.amp_motion_velocity_threshold).to(torch.long),
+      ),
+    )
+    return torch.nn.functional.one_hot(
+      label_ids, num_classes=AMP_LABEL_DIM
+    ).to(dtype=torch.float32)
 
   def act(self, obs):
     if self._env is None:
@@ -94,12 +118,7 @@ class AmpPPO(PPO):
     command = self._env.unwrapped.command_manager.get_command("twist")
     if command is None:
       raise RuntimeError("AMP requires the 'twist' velocity command.")
-    self._current_motion_label = (
-      (command[:, 0].to(self.device) > self.amp_motion_velocity_threshold)
-      .to(torch.float32)
-      .detach()
-      .clone()
-    )
+    self._current_motion_label = self._command_motion_label(command).detach().clone()
     return super().act(obs)
 
   def process_env_step(self, obs, rewards, dones, extras) -> None:
@@ -108,7 +127,7 @@ class AmpPPO(PPO):
     if self._current_motion_label is None:
       raise RuntimeError("AMP motion label was not captured before env.step().")
     next_state = obs["amp"].detach()
-    label = self._current_motion_label.unsqueeze(1)
+    label = self._current_motion_label
     current_state = torch.cat((self._current_amp_state, label), dim=1)
     next_state = torch.cat((next_state, label), dim=1)
     valid = dones == 0
@@ -184,20 +203,26 @@ class AmpPPO(PPO):
         policy_motion_label
       )
       policy_state = torch.cat(
-        (self.amp_normalizer.normalize(policy_state_raw[:, :-1]),
-         policy_state_raw[:, -1:]), dim=1
+        (
+          self.amp_normalizer.normalize(policy_state_raw[:, :-AMP_LABEL_DIM]),
+          policy_state_raw[:, -AMP_LABEL_DIM:],
+        ),
+        dim=1,
       )
       policy_next = torch.cat(
-        (self.amp_normalizer.normalize(policy_next_raw[:, :-1]),
-         policy_next_raw[:, -1:]), dim=1
+        (
+          self.amp_normalizer.normalize(policy_next_raw[:, :-AMP_LABEL_DIM]),
+          policy_next_raw[:, -AMP_LABEL_DIM:],
+        ),
+        dim=1,
       )
       expert_state = torch.cat(
-        (self.amp_normalizer.normalize(expert_state_raw),
-         expert_motion_label.unsqueeze(1)), dim=1
+        (self.amp_normalizer.normalize(expert_state_raw), expert_motion_label),
+        dim=1,
       )
       expert_next = torch.cat(
-        (self.amp_normalizer.normalize(expert_next_raw),
-         expert_motion_label.unsqueeze(1)), dim=1
+        (self.amp_normalizer.normalize(expert_next_raw), expert_motion_label),
+        dim=1,
       )
 
       policy_prediction = self.discriminator(policy_state, policy_next)
@@ -230,7 +255,7 @@ class AmpPPO(PPO):
         self.discriminator.parameters(), self.max_grad_norm
       )
       self.discriminator_optimizer.step()
-      self.amp_normalizer.update(policy_state_raw[:, :-1])
+      self.amp_normalizer.update(policy_state_raw[:, :-AMP_LABEL_DIM])
       self.amp_normalizer.update(expert_state_raw)
       totals["amp"] += amp_loss.item()
       totals["amp_grad_pen"] += grad_penalty.item()
@@ -238,7 +263,12 @@ class AmpPPO(PPO):
       totals["amp_expert_pred"] += expert_prediction.mean().item()
 
     loss_dict.update({name: value / updates for name, value in totals.items()})
-    loss_dict["amp_run_label_fraction"] = amp_data.last_fast_fraction
+    for label_name, fraction in zip(
+      AMP_LABEL_NAMES,
+      amp_data.last_label_fractions.tolist(),
+      strict=True,
+    ):
+      loss_dict[f"amp_label_fraction/{label_name}"] = float(fraction)
     loss_dict.update(
       {
         f"amp_motion_sample/{name}": float(fraction)

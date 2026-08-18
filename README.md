@@ -36,7 +36,7 @@ python scripts/list_envs.py
 
 ```bash
 python scripts/train.py AMP-Walk-Flat-E1-21DOF \
-  --env.scene.num-envs 4096 --gpu-ids 0
+  --env.scene.num-envs 4096 --gpu-ids '[0]'
 ```
 
 默认专家数据为 `dataset/e1_21dof/amp/walk.npz`、`run.npz` 和 `run_mirror.npz`。
@@ -47,14 +47,14 @@ python scripts/train.py AMP-Walk-Flat-E1-21DOF \
 python scripts/train.py AMP-Walk-Flat-E1-21DOF \
   --agent.resume True --agent.load-run 2026-08-18_11-57-11 \
   --agent.load-checkpoint model_6000.pt --agent.max-iterations 50000 \
-  --gpu-ids 0
+  --env.scene.num-envs 4096 --gpu-ids '[0]'
 ```
 
 ### Mimic 和 Play
 
 ```bash
 python scripts/train.py Tracking-Flat-E1-21DOF-No-State-Estimation \
-  --env.scene.num-envs 4096 --gpu-ids 0
+  --env.scene.num-envs 4096 --gpu-ids '[0]'
 
 python scripts/play_mimic.py Tracking-Flat-E1-21DOF-No-State-Estimation \
   --checkpoint-file logs/rsl_rl/<experiment>/<run>/model_5000.pt \
@@ -122,7 +122,7 @@ After activation, commands can be run directly with Python. Training uses Tensor
 
 ```bash
 python scripts/train.py AMP-Walk-Flat-E1-21DOF \
-  --env.scene.num-envs 4096 --gpu-ids 0
+  --env.scene.num-envs 4096 --gpu-ids '[0]'
 
 python scripts/play_amp.py AMP-Walk-Flat-E1-21DOF \
   --checkpoint-file logs/rsl_rl/e1_21dof_walk_run_amp/<run>/model_6000.pt \
@@ -130,7 +130,7 @@ python scripts/play_amp.py AMP-Walk-Flat-E1-21DOF \
   --num-envs 1 --device cuda:0 --viewer native
 
 python scripts/train.py Tracking-Flat-E1-21DOF-No-State-Estimation \
-  --env.scene.num-envs 4096 --gpu-ids 0
+  --env.scene.num-envs 4096 --gpu-ids '[0]'
 
 python scripts/play_mimic.py Tracking-Flat-E1-21DOF-No-State-Estimation \
   --checkpoint-file logs/rsl_rl/<experiment>/<run>/model_5000.pt \

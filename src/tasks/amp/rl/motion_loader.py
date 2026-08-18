@@ -10,11 +10,21 @@ from mjlab.utils.lab_api.math import matrix_from_quat, quat_inv, quat_mul
 
 from src.tasks.amp.constants import (
   AMP_KEY_BODY_NAMES,
+  AMP_LABEL_NAMES,
   AMP_OBS_DIM,
   MJLAB_JOINT_NAMES,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+_MOTION_LABEL_BY_STEM = {
+  "walk": 0,
+  "run": 1,
+  "run_mirror": 1,
+  "turn": 2,
+  "turn_trim": 2,
+  "side": 3,
+  "side_trim": 3,
+}
 
 
 def _quat_inverse(quaternion: torch.Tensor) -> torch.Tensor:
@@ -34,31 +44,31 @@ class MotionLoader:
     device: str,
     transition_dt: float,
     preload_transitions: int,
-    velocity_threshold: float,
-    slow_weights: tuple[float, ...],
-    fast_weights: tuple[float, ...],
+    motion_weights: tuple[float, ...],
   ):
     self.device = device
     self.transition_dt = transition_dt
     paths = self._resolve_files(motion_files)
     self.motion_names = tuple(path.stem for path in paths)
-    self.motion_labels = torch.tensor(
-      [0.0 if name == "walk" else 1.0 for name in self.motion_names],
-      device=device,
-      dtype=torch.float32,
-    )
+    try:
+      label_ids = [_MOTION_LABEL_BY_STEM[name] for name in self.motion_names]
+    except KeyError as error:
+      raise ValueError(
+        f"Unsupported AMP motion file stem {error.args[0]!r}; "
+        f"expected one of {tuple(_MOTION_LABEL_BY_STEM)}."
+      ) from error
+    self.motion_label_ids = torch.tensor(label_ids, device=device, dtype=torch.long)
+    self.motion_labels = torch.nn.functional.one_hot(
+      self.motion_label_ids, num_classes=len(AMP_LABEL_NAMES)
+    ).to(dtype=torch.float32)
     self.trajectories: list[torch.Tensor] = []
     self.frame_dt: list[float] = []
-    self.velocity_threshold = float(velocity_threshold)
-    if not np.isfinite(self.velocity_threshold):
-      raise ValueError("AMP motion velocity threshold must be finite.")
-    self.slow_weights = self._validate_weights(
-      slow_weights, len(paths), "slow"
+    self.motion_weights = self._validate_weights(
+      motion_weights, len(paths), "motion"
     )
-    self.fast_weights = self._validate_weights(
-      fast_weights, len(paths), "fast"
+    self.last_label_fractions = torch.zeros(
+      len(AMP_LABEL_NAMES), device=device
     )
-    self.last_fast_fraction = 0.0
     self.last_motion_fractions = torch.zeros(len(paths), device=device)
 
     print("\n========= AMP locomotion motion files ========")
@@ -232,15 +242,30 @@ class MotionLoader:
     return state, next_state
 
   def _draw_trajectory_ids(self, motion_label: torch.Tensor) -> torch.Tensor:
-    motion_label = motion_label.to(device=self.device, dtype=torch.float32).flatten()
-    fast = motion_label > 0.5
+    motion_label = motion_label.to(device=self.device, dtype=torch.float32)
+    if motion_label.ndim != 2 or motion_label.shape[1] != len(AMP_LABEL_NAMES):
+      raise ValueError(
+        f"AMP motion labels must have shape [N, {len(AMP_LABEL_NAMES)}], "
+        f"got {tuple(motion_label.shape)}."
+      )
+    if not torch.allclose(
+      motion_label.sum(dim=1), torch.ones(len(motion_label), device=self.device)
+    ):
+      raise ValueError("AMP motion labels must be one-hot vectors.")
+    label_ids = motion_label.argmax(dim=1)
+    matching = self.motion_label_ids.unsqueeze(0) == label_ids.unsqueeze(1)
     weights = torch.where(
-      fast.unsqueeze(1),
-      self.fast_weights.unsqueeze(0),
-      self.slow_weights.unsqueeze(0),
+      matching,
+      self.motion_weights.unsqueeze(0),
+      torch.zeros_like(self.motion_weights.unsqueeze(0)),
     )
+    if torch.any(weights.sum(dim=1) <= 0.0):
+      missing = torch.unique(label_ids[weights.sum(dim=1) <= 0.0]).tolist()
+      raise ValueError(f"No expert motion is configured for labels {missing}.")
     trajectory_ids = torch.multinomial(weights, num_samples=1).squeeze(1)
-    self.last_fast_fraction = fast.float().mean().item()
+    self.last_label_fractions = torch.bincount(
+      label_ids, minlength=len(AMP_LABEL_NAMES)
+    ).float() / max(len(label_ids), 1)
     self.last_motion_fractions = torch.bincount(
       trajectory_ids, minlength=len(self.trajectories)
     ).float() / max(len(trajectory_ids), 1)
