@@ -38,11 +38,16 @@ class AmpPpoAlgorithmCfg:
     "dataset/e1_21dof/amp/walk.npz",
     "dataset/e1_21dof/amp/run.npz",
     "dataset/e1_21dof/amp/run_mirror.npz",
-    "dataset/e1_21dof/amp/turn_trim.npz",
-    "dataset/e1_21dof/amp/side_trim.npz",
+    "dataset/e1_21dof/amp/turn_l.npz",
+    "dataset/e1_21dof/amp/turn_r.npz",
+    "dataset/e1_21dof/amp/side_l.npz",
+    "dataset/e1_21dof/amp/side_r.npz",
   )
   amp_motion_velocity_threshold: float = 0.8
-  amp_motion_weights: tuple[float, ...] = (1.0, 0.5, 0.5, 1.0, 1.0)
+  amp_motion_weights: tuple[float, ...] = (1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+  amp_motion_labels: tuple[str, ...] = (
+    "walk", "run", "run", "turn", "turn", "side", "side"
+  )
   amp_reward_coefficient: float = 0.4
   amp_task_reward_lerp: float = 0.7
   amp_discriminator_hidden_dims: tuple[int, ...] = (1024, 512, 256)

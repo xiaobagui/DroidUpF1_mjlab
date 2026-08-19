@@ -17,6 +17,10 @@ class VelocityStage(TypedDict, total=False):
   lin_vel_x: tuple[float, float]
   lin_vel_y: tuple[float, float]
   ang_vel_z: tuple[float, float]
+  pure_turn_ang_vel_z: tuple[float, float]
+  pure_lateral_lin_vel_y: tuple[float, float]
+  turning_deadband: float
+  lateral_deadband: float
 
 
 def command_velocity_stages(
@@ -38,6 +42,14 @@ def command_velocity_stages(
       cfg.ranges.lin_vel_y = stage["lin_vel_y"]
     if "ang_vel_z" in stage:
       cfg.ranges.ang_vel_z = stage["ang_vel_z"]
+    if "pure_turn_ang_vel_z" in stage:
+      cfg.ranges.pure_turn_ang_vel_z = stage["pure_turn_ang_vel_z"]
+    if "pure_lateral_lin_vel_y" in stage:
+      cfg.ranges.pure_lateral_lin_vel_y = stage["pure_lateral_lin_vel_y"]
+    if "turning_deadband" in stage:
+      cfg.turning_deadband = stage["turning_deadband"]
+    if "lateral_deadband" in stage:
+      cfg.lateral_deadband = stage["lateral_deadband"]
   return {
     "lin_vel_x_min": torch.tensor(cfg.ranges.lin_vel_x[0]),
     "lin_vel_x_max": torch.tensor(cfg.ranges.lin_vel_x[1]),
@@ -45,4 +57,18 @@ def command_velocity_stages(
     "lin_vel_y_max": torch.tensor(cfg.ranges.lin_vel_y[1]),
     "ang_vel_z_min": torch.tensor(cfg.ranges.ang_vel_z[0]),
     "ang_vel_z_max": torch.tensor(cfg.ranges.ang_vel_z[1]),
+    "pure_turn_ang_vel_z_min": torch.tensor(
+      cfg.ranges.pure_turn_ang_vel_z[0]
+    ),
+    "pure_turn_ang_vel_z_max": torch.tensor(
+      cfg.ranges.pure_turn_ang_vel_z[1]
+    ),
+    "pure_lateral_lin_vel_y_min": torch.tensor(
+      cfg.ranges.pure_lateral_lin_vel_y[0]
+    ),
+    "pure_lateral_lin_vel_y_max": torch.tensor(
+      cfg.ranges.pure_lateral_lin_vel_y[1]
+    ),
+    "turning_deadband": torch.tensor(cfg.turning_deadband),
+    "lateral_deadband": torch.tensor(cfg.lateral_deadband),
   }

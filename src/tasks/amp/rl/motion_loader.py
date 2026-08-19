@@ -16,17 +16,6 @@ from src.tasks.amp.constants import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_MOTION_LABEL_BY_STEM = {
-  "walk": 0,
-  "run": 1,
-  "run_mirror": 1,
-  "turn": 2,
-  "turn_trim": 2,
-  "side": 3,
-  "side_trim": 3,
-}
-
-
 def _quat_inverse(quaternion: torch.Tensor) -> torch.Tensor:
   return torch.cat((quaternion[..., :1], -quaternion[..., 1:]), dim=-1)
 
@@ -45,17 +34,24 @@ class MotionLoader:
     transition_dt: float,
     preload_transitions: int,
     motion_weights: tuple[float, ...],
+    motion_labels: tuple[str, ...],
   ):
     self.device = device
     self.transition_dt = transition_dt
     paths = self._resolve_files(motion_files)
     self.motion_names = tuple(path.stem for path in paths)
+    if len(motion_labels) != len(paths):
+      raise ValueError(
+        f"AMP motion_labels has {len(motion_labels)} entries; "
+        f"expected one per motion file ({len(paths)})."
+      )
+    label_to_id = {name: index for index, name in enumerate(AMP_LABEL_NAMES)}
     try:
-      label_ids = [_MOTION_LABEL_BY_STEM[name] for name in self.motion_names]
+      label_ids = [label_to_id[label] for label in motion_labels]
     except KeyError as error:
       raise ValueError(
-        f"Unsupported AMP motion file stem {error.args[0]!r}; "
-        f"expected one of {tuple(_MOTION_LABEL_BY_STEM)}."
+        f"Unsupported AMP motion label {error.args[0]!r}; "
+        f"expected one of {AMP_LABEL_NAMES}."
       ) from error
     self.motion_label_ids = torch.tensor(label_ids, device=device, dtype=torch.long)
     self.motion_labels = torch.nn.functional.one_hot(

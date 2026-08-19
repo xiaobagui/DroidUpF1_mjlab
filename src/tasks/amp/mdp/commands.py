@@ -133,7 +133,7 @@ class UniformVelocityCommand(CommandTerm):
     self.vel_command_b[turning_ids, :2] = 0.0
     self.vel_command_b[turning_ids, 2] = self._sample_outside_deadband(
       len(turning_ids),
-      self.cfg.ranges.ang_vel_z,
+      self.cfg.ranges.pure_turn_ang_vel_z,
       self.cfg.turning_deadband,
     )
     lateral_ids = env_ids[lateral]
@@ -141,7 +141,7 @@ class UniformVelocityCommand(CommandTerm):
     self.vel_command_b[lateral_ids, 2] = 0.0
     self.vel_command_b[lateral_ids, 1] = self._sample_outside_deadband(
       len(lateral_ids),
-      self.cfg.ranges.lin_vel_y,
+      self.cfg.ranges.pure_lateral_lin_vel_y,
       self.cfg.lateral_deadband,
     )
 
@@ -182,6 +182,8 @@ class UniformVelocityCommandCfg(CommandTermCfg):
     lin_vel_x: tuple[float, float]
     lin_vel_y: tuple[float, float]
     ang_vel_z: tuple[float, float]
+    pure_turn_ang_vel_z: tuple[float, float]
+    pure_lateral_lin_vel_y: tuple[float, float]
 
   ranges: Ranges
 

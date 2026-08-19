@@ -33,7 +33,12 @@ class AmpPPO(PPO):
     amp_transition_dt: float = 0.02,
     amp_gradient_penalty: float = 10.0,
     amp_motion_velocity_threshold: float = 0.8,
-    amp_motion_weights: tuple[float, ...] = (1.0, 0.5, 0.5, 1.0, 1.0),
+    amp_motion_weights: tuple[float, ...] = (
+      1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5
+    ),
+    amp_motion_labels: tuple[str, ...] = (
+      "walk", "run", "run", "turn", "turn", "side", "side"
+    ),
     minimum_action_std: tuple[float, ...] | None = None,
     **kwargs,
   ):
@@ -46,6 +51,7 @@ class AmpPPO(PPO):
     self.amp_gradient_penalty = amp_gradient_penalty
     self.amp_motion_velocity_threshold = amp_motion_velocity_threshold
     self.amp_motion_weights = amp_motion_weights
+    self.amp_motion_labels = amp_motion_labels
     self.discriminator = Discriminator(
       AMP_DISCRIMINATOR_STATE_DIM, tuple(amp_discriminator_hidden_dims)
     ).to(self.device)
@@ -89,6 +95,7 @@ class AmpPPO(PPO):
         self.amp_transition_dt,
         self.amp_preload_transitions,
         self.amp_motion_weights,
+        self.amp_motion_labels,
       )
     return self.amp_data
 

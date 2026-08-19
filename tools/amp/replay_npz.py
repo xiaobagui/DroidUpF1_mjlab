@@ -267,6 +267,8 @@ class NPZReplayer:
 
     frame = start_frame
     frame_period = 1.0 / (self.fps * speed)
+    stats_start = time.perf_counter()
+    stats_frames = 0
     with mj_viewer.launch_passive(self.model, self.data) as viewer:
       viewer.cam.distance = 3.0
       viewer.cam.azimuth = 45.0
@@ -277,6 +279,21 @@ class NPZReplayer:
         viewer.cam.lookat[:] = self.data.qpos[:3]
         viewer.sync()
         frame += 1
+        stats_frames += 1
+        stats_now = time.perf_counter()
+        stats_elapsed = stats_now - stats_start
+        if stats_elapsed >= 1.0:
+          actual_fps = stats_frames / stats_elapsed
+          print(
+            f"\r[PLAY] frame={frame:6d}/{self.frame_count} "
+            f"fps={actual_fps:6.1f} "
+            f"target={self.fps * speed:6.1f} "
+            f"speed={speed:.2f}x",
+            end="",
+            flush=True,
+          )
+          stats_start = stats_now
+          stats_frames = 0
         if frame >= self.frame_count:
           if not loop:
             break
@@ -284,6 +301,7 @@ class NPZReplayer:
         remaining = frame_period - (time.perf_counter() - start)
         if remaining > 0.0:
           time.sleep(remaining)
+    print()
 
 
 def main() -> None:
