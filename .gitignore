@@ -10,4 +10,8 @@ videos/
 artifacts/
 MUJOCO_LOG.TXT
 .vscode/
-dataset/f1/
+# Keep the dataset/f1 directory structure and small configuration files,
+# but exclude large serialized dataset/model files.
+/dataset/f1/**/*.npz
+/dataset/f1/**/*.pkl
+/dataset/f1/**/*.pt
