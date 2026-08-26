@@ -6,6 +6,10 @@
 
 ## 中文
 
+用 mjlab (MuJoCo + RL) 训练人形机器人的运动控制策略，两条技术路线：
+AMP (Adversarial Motion Prior)：判别器学专家动作的"风格"，策略跟随速度指令走路/跑步/转向。适合做可遥控的行走。
+Mimic (motion tracking)：直接跟踪一条参考轨迹，逐帧对齐关键 link 位姿。适合做舞蹈、后空翻这种特定动作复现。
+训练完导出 ONNX，再用 sim2sim/ 在纯 MuJoCo 里验证，为上真机做准备。
 使用 MJLab 在仿真中训练 DroidUp F1 人形机器人的运动策略，支持 AMP（Adversarial Motion Prior）速度指令运动和 Mimic 动作跟踪。F1 模型包含 28 个受控关节。
 
 ### 任务
@@ -32,6 +36,11 @@ cd DroidUpF1_mjlab
 uv sync
 source .venv/bin/activate
 ```
+
+环境已经装好了，直接激活：
+
+cd /home/msr/a/DroidUpF1_mjlab
+source .venv/bin/activate
 
 激活环境后可以直接运行 `python`，无需使用 `uv run`。主要依赖包括 MJLab 1.5.3、MuJoCo 3.10.0、PyTorch 2.13.0 和 RSL-RL 5.4.2。本地 `rsl_rl/` 以 editable 方式安装。
 
@@ -64,6 +73,10 @@ dataset/f1/
 
 ### 训练和回放 AMP
 
+训练 AMP（专家数据默认读 dataset/f1/amp/ 下的 walk/run/run_mirror/turn_l/turn_r/side_l/side_r 七个 npz，日志进 logs/rsl_rl/f1_walk_run_amp/）：
+
+python scripts/train.py AMP-Walk-Flat-F1 --env.scene.num-envs 1024 --gpu-ids '[0]'
+
 ```bash
 python scripts/train.py AMP-Walk-Flat-F1 \
   --env.scene.num-envs 4096 --gpu-ids '[0]'
@@ -84,6 +97,21 @@ python scripts/train.py AMP-Walk-Flat-F1 \
 ```
 
 ### 训练和回放 Mimic
+
+训练 Mimic（参考轨迹默认 dataset/f1/mimic/default/f1_motion.npz，日志进 logs/rsl_rl/external_f1_tracking/，默认 30000 迭代）：
+
+
+python scripts/train.py Tracking-Flat-F1-No-State-Estimation --env.scene.num-envs 1024 --gpu-ids '[0]'
+换轨迹加 --env.commands.motion.motion-file dataset/f1/mimic/backflip/robot_backflip_soma.npz。
+
+回放已有 checkpoint，logs/rsl_rl/external_f1_tracking/2026-08-21_17-08-21/ 里有训到 3000 步的模型：
+
+
+python scripts/play_mimic.py Tracking-Flat-F1-No-State-Estimation \
+  --checkpoint-file logs/rsl_rl/external_f1_tracking/2026-08-21_17-08-21/model_3000.pt \
+  --motion-file dataset/f1/mimic/default/f1_motion.npz \
+  --num-envs 1 --viewer native
+
 
 使用默认动作训练：
 
