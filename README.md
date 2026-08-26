@@ -75,7 +75,9 @@ dataset/f1/
 
 训练 AMP（专家数据默认读 dataset/f1/amp/ 下的 walk/run/run_mirror/turn_l/turn_r/side_l/side_r 七个 npz，日志进 logs/rsl_rl/f1_walk_run_amp/）：
 
+```bash
 python scripts/train.py AMP-Walk-Flat-F1 --env.scene.num-envs 1024 --gpu-ids '[0]'
+```
 
 ```bash
 python scripts/train.py AMP-Walk-Flat-F1 \
@@ -100,18 +102,24 @@ python scripts/train.py AMP-Walk-Flat-F1 \
 
 训练 Mimic（参考轨迹默认 dataset/f1/mimic/default/f1_motion.npz，日志进 logs/rsl_rl/external_f1_tracking/，默认 30000 迭代）：
 
-
+```bash
 python scripts/train.py Tracking-Flat-F1-No-State-Estimation --env.scene.num-envs 1024 --gpu-ids '[0]'
-换轨迹加 --env.commands.motion.motion-file dataset/f1/mimic/backflip/robot_backflip_soma.npz。
+```
+
+换轨迹加 
+
+```bash
+--env.commands.motion.motion-file dataset/f1/mimic/backflip/robot_backflip_soma.npz。
+```
 
 回放已有 checkpoint，logs/rsl_rl/external_f1_tracking/2026-08-21_17-08-21/ 里有训到 3000 步的模型：
 
-
+```bash
 python scripts/play_mimic.py Tracking-Flat-F1-No-State-Estimation \
   --checkpoint-file logs/rsl_rl/external_f1_tracking/2026-08-21_17-08-21/model_3000.pt \
   --motion-file dataset/f1/mimic/default/f1_motion.npz \
   --num-envs 1 --viewer native
-
+```
 
 使用默认动作训练：
 
