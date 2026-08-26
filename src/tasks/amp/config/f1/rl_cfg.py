@@ -1,18 +1,18 @@
-"""Self-contained RSL-RL 5.4.2 configuration for E1 locomotion AMP."""
+"""Self-contained RSL-RL 5.4.2 configuration for F1 locomotion AMP."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Literal
 
 from mjlab.rl import RslRlModelCfg
 
-from src.tasks.amp.constants import (
-  AMP_DISCRIMINATOR_STATE_DIM,
-  AMP_KEY_BODY_NAMES,
-  AMP_LABEL_NAMES,
-  AMP_OBS_DIM,
-  MJLAB_JOINT_NAMES,
+from .constants import (
+  F1_AMP_DISCRIMINATOR_STATE_DIM,
+  F1_AMP_KEY_BODY_NAMES,
+  F1_AMP_LABEL_NAMES,
+  F1_AMP_OBS_DIM,
+  F1_JOINT_NAMES,
 )
 
 
@@ -34,28 +34,21 @@ class AmpPpoAlgorithmCfg:
   optimizer: str = "adam"
   share_cnn_encoders: bool = False
   rnd_cfg: None = None
-  symmetry_cfg: dict[str, Any] = field(
-    default_factory=lambda: {
-      "use_data_augmentation": True,
-      "data_augmentation_func": "src.tasks.amp.symmetry:data_augmentation_func",
-      "use_mirror_loss": True,
-      "mirror_loss_coeff": 0.1,
-    }
-  )
+  symmetry_cfg: None = None
+  amp_joint_names: tuple[str, ...] = F1_JOINT_NAMES
+  amp_key_body_names: tuple[str, ...] = F1_AMP_KEY_BODY_NAMES
+  amp_label_names: tuple[str, ...] = F1_AMP_LABEL_NAMES
+  amp_obs_dim: int = F1_AMP_OBS_DIM
+  amp_discriminator_state_dim: int = F1_AMP_DISCRIMINATOR_STATE_DIM
   amp_motion_files: tuple[str, ...] = (
-    "dataset/e1_21dof/amp/walk.npz",
-    "dataset/e1_21dof/amp/run.npz",
-    "dataset/e1_21dof/amp/run_mirror.npz",
-    "dataset/e1_21dof/amp/turn_l.npz",
-    "dataset/e1_21dof/amp/turn_r.npz",
-    "dataset/e1_21dof/amp/side_l.npz",
-    "dataset/e1_21dof/amp/side_r.npz",
+    "dataset/f1/amp/walk.npz",
+    "dataset/f1/amp/run.npz",
+    "dataset/f1/amp/run_mirror.npz",
+    "dataset/f1/amp/turn_l.npz",
+    "dataset/f1/amp/turn_r.npz",
+    "dataset/f1/amp/side_l.npz",
+    "dataset/f1/amp/side_r.npz",
   )
-  amp_joint_names: tuple[str, ...] = MJLAB_JOINT_NAMES
-  amp_key_body_names: tuple[str, ...] = AMP_KEY_BODY_NAMES
-  amp_label_names: tuple[str, ...] = AMP_LABEL_NAMES
-  amp_obs_dim: int = AMP_OBS_DIM
-  amp_discriminator_state_dim: int = AMP_DISCRIMINATOR_STATE_DIM
   amp_motion_velocity_threshold: float = 0.8
   amp_motion_weights: tuple[float, ...] = (1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
   amp_motion_labels: tuple[str, ...] = (
@@ -68,12 +61,12 @@ class AmpPpoAlgorithmCfg:
   amp_preload_transitions: int = 500_000
   amp_transition_dt: float = 0.02
   amp_gradient_penalty: float = 10.0
-  minimum_action_std: tuple[float, ...] = (0.05,) * 21
+  minimum_action_std: tuple[float, ...] = (0.05,) * len(F1_JOINT_NAMES)
   class_name: str = "src.tasks.amp.rl.algorithm:AmpPPO"
 
 
 @dataclass
-class E121DofWalkAmpRunnerCfg:
+class F1WalkAmpRunnerCfg:
   seed: int = 42
   num_steps_per_env: int = 24
   max_iterations: int = 50_000
@@ -81,7 +74,7 @@ class E121DofWalkAmpRunnerCfg:
     default_factory=lambda: {"actor": ("actor",), "critic": ("critic",)}
   )
   save_interval: int = 100
-  experiment_name: str = "e1_21dof_walk_run_amp"
+  experiment_name: str = "f1_walk_run_amp"
   run_name: str = ""
   logger: Literal["tensorboard"] = "tensorboard"
   resume: bool = False
@@ -115,5 +108,5 @@ class E121DofWalkAmpRunnerCfg:
   algorithm: AmpPpoAlgorithmCfg = field(default_factory=AmpPpoAlgorithmCfg)
 
 
-def e1_21dof_walk_amp_runner_cfg() -> E121DofWalkAmpRunnerCfg:
-  return E121DofWalkAmpRunnerCfg()
+def f1_walk_amp_runner_cfg() -> F1WalkAmpRunnerCfg:
+  return F1WalkAmpRunnerCfg()

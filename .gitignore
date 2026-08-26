@@ -9,3 +9,5 @@ wandb/
 videos/
 artifacts/
 MUJOCO_LOG.TXT
+.vscode/
+dataset/f1/

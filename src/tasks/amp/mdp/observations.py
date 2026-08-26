@@ -1,4 +1,4 @@
-"""Policy, critic, and discriminator observations for E1 locomotion AMP."""
+"""Policy, critic, and discriminator observations for locomotion AMP."""
 
 from __future__ import annotations
 
@@ -50,6 +50,7 @@ def _actor_frame(
   torso_cfg: SceneEntityCfg,
   velocity_command_name: str,
   corrupt: bool,
+  frame_dim: int | None = None,
 ) -> torch.Tensor:
   asset: Entity = env.scene[joint_cfg.name]
   ang_vel_b, gravity_b = _torso_imu(asset, torso_cfg)
@@ -69,16 +70,18 @@ def _actor_frame(
     ),
     dim=1,
   )
-  assert frame.shape[1] == ACTOR_FRAME_DIM
+  expected_dim = frame_dim or ACTOR_FRAME_DIM
+  assert frame.shape[1] == expected_dim
 
   if corrupt:
     # Match the original Isaac Lab task's per-field uniform noise.  Keeping the
     # whole frame in one observation term preserves frame-major history order.
-    scale = torch.zeros(ACTOR_FRAME_DIM, device=env.device)
+    scale = torch.zeros(expected_dim, device=env.device)
+    num_joints = joint_pos.shape[1]
     scale[0:3] = 0.3 * 0.2
     scale[3:6] = 0.05
-    scale[9:30] = 0.02
-    scale[30:51] = 1.5 * 0.05
+    scale[9 : 9 + num_joints] = 0.02
+    scale[9 + num_joints : 9 + 2 * num_joints] = 1.5 * 0.05
     frame = frame + (2.0 * torch.rand_like(frame) - 1.0) * scale
   return frame
 
@@ -88,6 +91,7 @@ def actor_frame(
   joint_cfg: SceneEntityCfg,
   torso_cfg: SceneEntityCfg,
   velocity_command_name: str = "twist",
+  frame_dim: int | None = None,
 ) -> torch.Tensor:
   corrupt = env.cfg.observations["actor"].enable_corruption
   return _actor_frame(
@@ -96,6 +100,7 @@ def actor_frame(
     torso_cfg,
     velocity_command_name,
     corrupt=corrupt,
+    frame_dim=frame_dim,
   )
 
 
@@ -105,6 +110,8 @@ def critic_frame(
   torso_cfg: SceneEntityCfg,
   feet_contact_sensor_name: str,
   velocity_command_name: str = "twist",
+  actor_frame_dim: int | None = None,
+  critic_frame_dim: int | None = None,
 ) -> torch.Tensor:
   asset: Entity = env.scene[joint_cfg.name]
   actor = _actor_frame(
@@ -113,6 +120,7 @@ def critic_frame(
     torso_cfg,
     velocity_command_name,
     corrupt=False,
+    frame_dim=actor_frame_dim,
   )
   sensor: ContactSensor = env.scene[feet_contact_sensor_name]
   assert sensor.data.found is not None
@@ -121,7 +129,8 @@ def critic_frame(
   if contact.ndim > 2:
     contact = contact.flatten(start_dim=2).any(dim=2).float()
   frame = torch.cat((actor, asset.data.root_link_lin_vel_b, contact), dim=1)
-  assert frame.shape[1] == CRITIC_FRAME_DIM
+  expected_dim = critic_frame_dim or CRITIC_FRAME_DIM
+  assert frame.shape[1] == expected_dim
   return frame
 
 
@@ -129,6 +138,7 @@ def amp_state(
   env: ManagerBasedRlEnv,
   joint_cfg: SceneEntityCfg,
   key_body_cfg: SceneEntityCfg,
+  amp_obs_dim: int | None = None,
 ) -> torch.Tensor:
   """Return the discriminator state used by the expert NPZ loader."""
   asset: Entity = env.scene[joint_cfg.name]
@@ -158,5 +168,6 @@ def amp_state(
     ),
     dim=1,
   )
-  assert state.shape[1] == AMP_OBS_DIM
+  expected_dim = amp_obs_dim or AMP_OBS_DIM
+  assert state.shape[1] == expected_dim
   return state

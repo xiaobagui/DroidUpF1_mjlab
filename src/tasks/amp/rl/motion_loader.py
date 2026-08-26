@@ -1,4 +1,4 @@
-"""Load XML-order E1 locomotion NPZ files as AMP discriminator states."""
+"""Load XML-order locomotion NPZ files as AMP discriminator states."""
 
 from __future__ import annotations
 
@@ -8,14 +8,12 @@ import numpy as np
 import torch
 from mjlab.utils.lab_api.math import matrix_from_quat, quat_inv, quat_mul
 
-from src.tasks.amp.constants import (
-  AMP_KEY_BODY_NAMES,
-  AMP_LABEL_NAMES,
-  AMP_OBS_DIM,
-  MJLAB_JOINT_NAMES,
-)
+from src.tasks.amp.constants import AMP_KEY_BODY_NAMES, AMP_LABEL_NAMES, MJLAB_JOINT_NAMES
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
 def _quat_inverse(quaternion: torch.Tensor) -> torch.Tensor:
   return torch.cat((quaternion[..., :1], -quaternion[..., 1:]), dim=-1)
 
@@ -35,9 +33,16 @@ class MotionLoader:
     preload_transitions: int,
     motion_weights: tuple[float, ...],
     motion_labels: tuple[str, ...],
+    joint_names: tuple[str, ...] = MJLAB_JOINT_NAMES,
+    key_body_names: tuple[str, ...] = AMP_KEY_BODY_NAMES,
+    label_names: tuple[str, ...] = AMP_LABEL_NAMES,
   ):
     self.device = device
     self.transition_dt = transition_dt
+    self.joint_names = tuple(joint_names)
+    self.key_body_names = tuple(key_body_names)
+    self.label_names = tuple(label_names)
+    self.amp_obs_dim = 6 + 2 * len(self.joint_names) + 9 * len(self.key_body_names)
     paths = self._resolve_files(motion_files)
     self.motion_names = tuple(path.stem for path in paths)
     if len(motion_labels) != len(paths):
@@ -45,17 +50,17 @@ class MotionLoader:
         f"AMP motion_labels has {len(motion_labels)} entries; "
         f"expected one per motion file ({len(paths)})."
       )
-    label_to_id = {name: index for index, name in enumerate(AMP_LABEL_NAMES)}
+    label_to_id = {name: index for index, name in enumerate(self.label_names)}
     try:
       label_ids = [label_to_id[label] for label in motion_labels]
     except KeyError as error:
       raise ValueError(
         f"Unsupported AMP motion label {error.args[0]!r}; "
-        f"expected one of {AMP_LABEL_NAMES}."
+        f"expected one of {self.label_names}."
       ) from error
     self.motion_label_ids = torch.tensor(label_ids, device=device, dtype=torch.long)
     self.motion_labels = torch.nn.functional.one_hot(
-      self.motion_label_ids, num_classes=len(AMP_LABEL_NAMES)
+      self.motion_label_ids, num_classes=len(self.label_names)
     ).to(dtype=torch.float32)
     self.trajectories: list[torch.Tensor] = []
     self.frame_dt: list[float] = []
@@ -63,7 +68,7 @@ class MotionLoader:
       motion_weights, len(paths), "motion"
     )
     self.last_label_fractions = torch.zeros(
-      len(AMP_LABEL_NAMES), device=device
+      len(self.label_names), device=device
     )
     self.last_motion_fractions = torch.zeros(len(paths), device=device)
 
@@ -145,25 +150,31 @@ class MotionLoader:
       for name in required[:-1]:
         if not np.isfinite(data[name]).all():
           raise ValueError(f"{path} contains non-finite values in '{name}'.")
-      if data["joint_pos"].shape[1] != len(MJLAB_JOINT_NAMES):
-        raise ValueError(f"{path} does not contain 21-DOF E1 joint data.")
-      if data["key_body_pos"].shape[1] != 3 * len(AMP_KEY_BODY_NAMES):
-        raise ValueError(f"{path} does not contain six AMP key bodies.")
+      if data["joint_pos"].shape[1] != len(self.joint_names):
+        raise ValueError(
+          f"{path} contains {data['joint_pos'].shape[1]} joints; "
+          f"expected {len(self.joint_names)}."
+        )
+      if data["key_body_pos"].shape[1] != 3 * len(self.key_body_names):
+        raise ValueError(
+          f"{path} contains {data['key_body_pos'].shape[1]} key-body position "
+          f"values; expected {3 * len(self.key_body_names)}."
+        )
       if data["key_body_quat_w"].shape[1:] != (
-        len(AMP_KEY_BODY_NAMES),
+        len(self.key_body_names),
         4,
       ):
         raise ValueError(f"{path} has invalid AMP key-body orientations.")
       if "joint_names" in data.files:
         stored_joint_names = data["joint_names"].astype(str).tolist()
-        if stored_joint_names != list(MJLAB_JOINT_NAMES):
+        if stored_joint_names != list(self.joint_names):
           raise ValueError(
-            f"{path} joint order does not match E1_21dof.xml:\n"
-            f"NPZ: {stored_joint_names}\nXML: {list(MJLAB_JOINT_NAMES)}"
+            f"{path} joint order does not match the AMP robot config:\n"
+            f"NPZ: {stored_joint_names}\nConfig: {list(self.joint_names)}"
           )
       if "key_body_names" in data.files:
         stored_key_bodies = data["key_body_names"].astype(str).tolist()
-        if stored_key_bodies != list(AMP_KEY_BODY_NAMES):
+        if stored_key_bodies != list(self.key_body_names):
           raise ValueError(f"{path} has an unexpected AMP key-body order.")
 
       joint_pos = torch.as_tensor(
@@ -186,7 +197,7 @@ class MotionLoader:
       )
       key_pos_w = torch.as_tensor(
         data["key_body_pos"], device=self.device, dtype=torch.float32
-      ).reshape(-1, len(AMP_KEY_BODY_NAMES), 3)
+      ).reshape(-1, len(self.key_body_names), 3)
       key_quat_w = torch.as_tensor(
         data["key_body_quat_w"], device=self.device, dtype=torch.float32
       )
@@ -208,7 +219,7 @@ class MotionLoader:
     lin_vel_b = _quat_apply(inverse, lin_vel_w)
     ang_vel_b = _quat_apply(inverse, ang_vel_w)
     relative = key_pos_w - root_pos.unsqueeze(1)
-    inverse_repeated = inverse.unsqueeze(1).expand(-1, len(AMP_KEY_BODY_NAMES), -1)
+    inverse_repeated = inverse.unsqueeze(1).expand(-1, len(self.key_body_names), -1)
     key_pos_b = _quat_apply(inverse_repeated, relative).flatten(start_dim=1)
     root_quat_inverse = quat_inv(root_quat).unsqueeze(1).expand_as(key_quat_w)
     key_quat_b = quat_mul(root_quat_inverse, key_quat_w)
@@ -217,9 +228,9 @@ class MotionLoader:
       (lin_vel_b, ang_vel_b, joint_pos, joint_vel, key_pos_b, key_ori_b),
       dim=1,
     )
-    if trajectory.shape[1] != AMP_OBS_DIM:
+    if trajectory.shape[1] != self.amp_obs_dim:
       raise RuntimeError(
-        f"Expected {AMP_OBS_DIM} AMP values, got {trajectory.shape[1]}."
+        f"Expected {self.amp_obs_dim} AMP values, got {trajectory.shape[1]}."
       )
     return trajectory, 1.0 / fps
 
@@ -239,9 +250,9 @@ class MotionLoader:
 
   def _draw_trajectory_ids(self, motion_label: torch.Tensor) -> torch.Tensor:
     motion_label = motion_label.to(device=self.device, dtype=torch.float32)
-    if motion_label.ndim != 2 or motion_label.shape[1] != len(AMP_LABEL_NAMES):
+    if motion_label.ndim != 2 or motion_label.shape[1] != len(self.label_names):
       raise ValueError(
-        f"AMP motion labels must have shape [N, {len(AMP_LABEL_NAMES)}], "
+        f"AMP motion labels must have shape [N, {len(self.label_names)}], "
         f"got {tuple(motion_label.shape)}."
       )
     if not torch.allclose(
@@ -260,7 +271,7 @@ class MotionLoader:
       raise ValueError(f"No expert motion is configured for labels {missing}.")
     trajectory_ids = torch.multinomial(weights, num_samples=1).squeeze(1)
     self.last_label_fractions = torch.bincount(
-      label_ids, minlength=len(AMP_LABEL_NAMES)
+      label_ids, minlength=len(self.label_names)
     ).float() / max(len(label_ids), 1)
     self.last_motion_fractions = torch.bincount(
       trajectory_ids, minlength=len(self.trajectories)
@@ -271,7 +282,7 @@ class MotionLoader:
     self, trajectory_ids: torch.Tensor
   ) -> tuple[torch.Tensor, torch.Tensor]:
     count = len(trajectory_ids)
-    state = torch.empty(count, AMP_OBS_DIM, device=self.device)
+    state = torch.empty(count, self.amp_obs_dim, device=self.device)
     next_state = torch.empty_like(state)
     for trajectory_id in torch.unique(trajectory_ids).tolist():
       mask = trajectory_ids == trajectory_id
@@ -304,7 +315,7 @@ class MotionLoader:
       state, next_state = self._sample(trajectory_ids)
     else:
       count = len(trajectory_ids)
-      state = torch.empty(count, AMP_OBS_DIM, device=self.device)
+      state = torch.empty(count, self.amp_obs_dim, device=self.device)
       next_state = torch.empty_like(state)
       for trajectory_id in torch.unique(trajectory_ids).tolist():
         mask = trajectory_ids == trajectory_id

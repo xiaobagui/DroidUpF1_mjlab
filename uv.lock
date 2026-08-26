@@ -447,7 +447,7 @@ wheels = [
 ]
 
 [[package]]
-name = "droidup-e1-mjlab"
+name = "droidup-f1-mjlab"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

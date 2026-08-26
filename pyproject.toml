@@ -3,9 +3,9 @@ requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "droidup-e1-mjlab"
+name = "droidup-f1-mjlab"
 version = "0.1.0"
-description = "External mjlab tasks and robot assets for E1 development."
+description = "External mjlab tasks and robot assets for F1 development."
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "mjlab==1.5.3",
@@ -20,11 +20,11 @@ dependencies = [
 ]
 
 [project.scripts]
-e1-train = "scripts.train:main"
-e1-play-mimic = "scripts.play_mimic:main"
-e1-play-amp = "scripts.play_amp:main"
-e1-list-envs = "scripts.list_envs:main"
-e1-download-demo-motion = "scripts.download_demo_motion:main"
+f1-train = "scripts.train:main"
+f1-play-mimic = "scripts.play_mimic:main"
+f1-play-amp = "scripts.play_amp:main"
+f1-list-envs = "scripts.list_envs:main"
+f1-download-demo-motion = "scripts.download_demo_motion:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

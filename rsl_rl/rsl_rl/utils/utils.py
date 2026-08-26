@@ -161,8 +161,34 @@ def resolve_callable(callable_or_name: type | Callable | str) -> Callable:
         else:
             raise ImportError(f"Could not resolve '{callable_or_name}': no valid module.attr split found")
 
-    # Simple name - look for it in rsl_rl
-    for _, module_name, _ in pkgutil.iter_modules(rsl_rl.__path__, "rsl_rl."):
+    # Simple name - look for it in rsl_rl.  When the editable checkout is used
+    # from its parent repository, the outer ``rsl_rl/`` directory can also be
+    # visible as a namespace package.  Its ``setup.py`` is then reported by
+    # ``pkgutil`` and importing it parses the training command as a setuptools
+    # command (for example, ``invalid command name 'Tracking-...'``).
+    # Search the canonical subpackages first and never import setup/tests.
+    candidate_modules = (
+        "rsl_rl.algorithms",
+        "rsl_rl.models",
+        "rsl_rl.modules",
+        "rsl_rl.runners",
+        "rsl_rl.extensions",
+        "rsl_rl.utils",
+        "rsl_rl.env",
+        "rsl_rl.storage",
+    )
+    seen_modules: set[str] = set()
+    for module_name in candidate_modules:
+        seen_modules.add(module_name)
+        module = importlib.import_module(module_name)
+        if hasattr(module, callable_or_name):
+            return getattr(module, callable_or_name)
+
+    # Retain support for callables exposed by other rsl_rl submodules while
+    # filtering modules that are not runtime code.
+    for _, module_name, _ in pkgutil.walk_packages(rsl_rl.__path__, "rsl_rl."):
+        if module_name in seen_modules or ".tests" in module_name or module_name.endswith(".setup"):
+            continue
         module = importlib.import_module(module_name)
         if hasattr(module, callable_or_name):
             return getattr(module, callable_or_name)

@@ -6,12 +6,7 @@ import torch
 from rsl_rl.algorithms import PPO
 from tensordict import TensorDict
 
-from src.tasks.amp.constants import (
-  AMP_DISCRIMINATOR_STATE_DIM,
-  AMP_LABEL_DIM,
-  AMP_LABEL_NAMES,
-  AMP_OBS_DIM,
-)
+from src.tasks.amp.constants import AMP_LABEL_NAMES
 from src.tasks.amp.mdp.commands import COMMAND_MODE_LATERAL, COMMAND_MODE_TURNING
 
 from .discriminator import Discriminator
@@ -25,6 +20,11 @@ class AmpPPO(PPO):
     self,
     *args,
     amp_motion_files,
+    amp_joint_names,
+    amp_key_body_names,
+    amp_label_names=AMP_LABEL_NAMES,
+    amp_obs_dim: int,
+    amp_discriminator_state_dim: int,
     amp_reward_coefficient: float = 0.4,
     amp_task_reward_lerp: float = 0.7,
     amp_discriminator_hidden_dims: tuple[int, ...] = (1024, 512, 256),
@@ -44,6 +44,11 @@ class AmpPPO(PPO):
   ):
     super().__init__(*args, **kwargs)
     self.amp_motion_files = tuple(amp_motion_files)
+    self.amp_joint_names = tuple(amp_joint_names)
+    self.amp_key_body_names = tuple(amp_key_body_names)
+    self.amp_label_names = tuple(amp_label_names)
+    self.amp_obs_dim = amp_obs_dim
+    self.amp_discriminator_state_dim = amp_discriminator_state_dim
     self.amp_reward_coefficient = amp_reward_coefficient
     self.amp_task_reward_lerp = amp_task_reward_lerp
     self.amp_preload_transitions = amp_preload_transitions
@@ -53,7 +58,7 @@ class AmpPPO(PPO):
     self.amp_motion_weights = amp_motion_weights
     self.amp_motion_labels = amp_motion_labels
     self.discriminator = Discriminator(
-      AMP_DISCRIMINATOR_STATE_DIM, tuple(amp_discriminator_hidden_dims)
+      self.amp_discriminator_state_dim, tuple(amp_discriminator_hidden_dims)
     ).to(self.device)
     self.discriminator_optimizer = torch.optim.Adam(
       [
@@ -62,11 +67,11 @@ class AmpPPO(PPO):
       ],
       lr=self.learning_rate,
     )
-    self.amp_normalizer = RunningNormalizer(AMP_OBS_DIM).to(self.device)
+    self.amp_normalizer = RunningNormalizer(self.amp_obs_dim).to(self.device)
     self.amp_replay = ReplayBuffer(
       amp_replay_buffer_size,
-      AMP_DISCRIMINATOR_STATE_DIM,
-      AMP_LABEL_DIM,
+      self.amp_discriminator_state_dim,
+      len(self.amp_label_names),
       self.device,
     )
     self.amp_data: MotionLoader | None = None
@@ -96,6 +101,9 @@ class AmpPPO(PPO):
         self.amp_preload_transitions,
         self.amp_motion_weights,
         self.amp_motion_labels,
+        joint_names=self.amp_joint_names,
+        key_body_names=self.amp_key_body_names,
+        label_names=self.amp_label_names,
       )
     return self.amp_data
 
@@ -115,7 +123,7 @@ class AmpPPO(PPO):
       ),
     )
     return torch.nn.functional.one_hot(
-      label_ids, num_classes=AMP_LABEL_DIM
+      label_ids, num_classes=len(self.amp_label_names)
     ).to(dtype=torch.float32)
 
   def act(self, obs):
@@ -211,15 +219,15 @@ class AmpPPO(PPO):
       )
       policy_state = torch.cat(
         (
-          self.amp_normalizer.normalize(policy_state_raw[:, :-AMP_LABEL_DIM]),
-          policy_state_raw[:, -AMP_LABEL_DIM:],
+          self.amp_normalizer.normalize(policy_state_raw[:, :-len(self.amp_label_names)]),
+          policy_state_raw[:, -len(self.amp_label_names):],
         ),
         dim=1,
       )
       policy_next = torch.cat(
         (
-          self.amp_normalizer.normalize(policy_next_raw[:, :-AMP_LABEL_DIM]),
-          policy_next_raw[:, -AMP_LABEL_DIM:],
+          self.amp_normalizer.normalize(policy_next_raw[:, :-len(self.amp_label_names)]),
+          policy_next_raw[:, -len(self.amp_label_names):],
         ),
         dim=1,
       )
@@ -262,7 +270,7 @@ class AmpPPO(PPO):
         self.discriminator.parameters(), self.max_grad_norm
       )
       self.discriminator_optimizer.step()
-      self.amp_normalizer.update(policy_state_raw[:, :-AMP_LABEL_DIM])
+      self.amp_normalizer.update(policy_state_raw[:, :-len(self.amp_label_names)])
       self.amp_normalizer.update(expert_state_raw)
       totals["amp"] += amp_loss.item()
       totals["amp_grad_pen"] += grad_penalty.item()
@@ -271,7 +279,7 @@ class AmpPPO(PPO):
 
     loss_dict.update({name: value / updates for name, value in totals.items()})
     for label_name, fraction in zip(
-      AMP_LABEL_NAMES,
+      self.amp_label_names,
       amp_data.last_label_fractions.tolist(),
       strict=True,
     ):
